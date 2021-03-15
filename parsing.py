@@ -33,7 +33,7 @@ def get_url_product(session, number):
 
     logger.info(f'Открываем страницу поиска товара {SEARCH_REQUEST + number}')
     try:
-        response = session.get(SEARCH_REQUEST + number, headers=HEADERS)
+        response = session.get(SEARCH_REQUEST + number, headers=HEADERS, timeout=30)
         request_counter += 1
 
         if response.status_code == 200:
@@ -83,7 +83,7 @@ def get_parsing_product(session, url_product):
     documents = []  # документы
 
     try:
-        response = session.get(url=url_product, headers=HEADERS)
+        response = session.get(url=url_product, headers=HEADERS, timeout=30)
         request_counter += 1
     except Exception as ex:  # ответ от сервера не получен
         logger.error(f'Ошибка открытия страницы товара. Парсинг невозможен. {ex}')
@@ -227,7 +227,7 @@ def parsing(article_numbers: list):
 
     logger.info(f'Открываем главную страницу {MAIN_URL}')
     session = requests.Session()
-    response = session.get(url=MAIN_URL, headers=HEADERS)
+    response = session.get(url=MAIN_URL, headers=HEADERS, timeout=30)
     request_counter += 1
     logger.debug(f'Код ответа {response.status_code}')
 
