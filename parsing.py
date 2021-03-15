@@ -9,7 +9,9 @@ from bs4 import BeautifulSoup
 from loguru import logger
 
 from settings.settings import MAIN_URL, HEADERS, DIR_PICKLE, SEARCH_REQUEST, LIMIT_ERROR_REQUEST, \
-    PAUSE_PARSING_PRODUCT, FILE_TMP_RESULT, FILE_RECOVERY, DIR_RECOVERY, RECOVERY_MODE
+    PAUSE_PARSING_PRODUCT, FILE_TMP_RESULT, FILE_RECOVERY, DIR_RECOVERY, RECOVERY_MODE, \
+    FTP_DIR_IMAGES, DIR_IMAGES, FTP_DIR_DOCS, DIR_DOCS
+
 
 request_counter = 0  # счетчик request запросов
 error_count = 0  # счетчик ошибок request запросов, идущих подряд
@@ -61,9 +63,93 @@ def get_url_product(session, number):
     return url
 
 
-def get_parsing_product(session, url_product):
+def save_images_by_url(session, url_img, number, count):
+    """
+    Сохранение изображения товара на локальный диск в папку DIR_IMAGES
+    :param session: текущая сессия get-запросов
+    :param url_img: ссылка на изображение товара сайта источника
+    :param number: артикул товара
+    :param count: порядковый номер изображения товара
+    :return: name_file имя файла сохраненного изображения товара
+    """
+    global request_counter, error_count
+
+    name_file = ''
+    try:
+        response = session.get(url=url_img, headers=HEADERS, timeout=30)
+        request_counter += 1
+
+        if response.status_code == 200 and response.content:
+            save_session(session=session)
+
+            ext_file = url_img[url_img.rfind('.'):]
+            name_file = 'img' + number[-1::-1].replace('-', '') + str(count) + ext_file
+
+            with open(os.getcwd() + DIR_IMAGES + name_file, 'wb') as file:
+                file.write(response.content)
+
+        else:
+            logger.error(f'Получить картинку товара невозможно. Ответ сервера {response.status_code}')
+            error_count += 1
+
+    except Exception as ex:  # ответ от сервера не получен
+        logger.error(f'Ошибка получения картинки товара {url_img}. {ex}')
+        error_count += 1
+        logger.debug(f'Счетчик request запросов {request_counter}, счетчик ошибок {error_count}')
+
+    return name_file
+
+
+def save_document_by_url(session, doc_url, doc_name):
+    """
+    Сохранение документов товара на локальный диск в папку DIR_IMAGES
+    :param session: текущая сессия для get-запросов
+    :param doc_url: ссылка документа для скачивания
+    :param doc_name: название документа
+    :return: name_file включает в себя адрес хранения документа папка (хеш) и имя документа
+    """
+    global request_counter, error_count
+
+    name_file = ''
+    try:
+        response = session.get(url=doc_url, headers=HEADERS, timeout=30)
+        request_counter += 1
+
+        if response.status_code == 200 and response.content:
+            save_session(session=session)
+
+            doc_hash = doc_url[doc_url.rfind('=') + 1:]  # получаем хеш документа из ссылки
+
+            # создаем директорию
+            path_dir = os.getcwd() + DIR_DOCS + doc_hash + '\\'
+            # TODO сделать универсально для разных ОС
+            try:
+                os.mkdir(path=path_dir)
+            except FileExistsError:
+                pass
+
+            name_file = doc_name + '.pdf'
+            with open(path_dir + name_file, 'wb') as file:
+                file.write(response.content)
+
+            name_file = f'{doc_hash}/{name_file}'
+
+        else:
+            logger.error(f'Получить документ товара невозможно. Ответ сервера {response.status_code}')
+            error_count += 1
+
+    except Exception as ex:  # ответ от сервера не получен
+        logger.error(f'Ошибка получения документа товара {doc_url}. {ex}')
+        error_count += 1
+        logger.debug(f'Счетчик request запросов {request_counter}, счетчик ошибок {error_count}')
+
+    return name_file
+
+
+def get_parsing_product(session, url_product, number):
     """
     Парсинг страницы товара
+    :param number: артикул товара
     :param session: текущая сессия
     :param url_product: url страницы товара
     :return: result_parsing_product словарь результата парсинга одного товара
@@ -134,8 +220,13 @@ def get_parsing_product(session, url_product):
         try:
             images_soup = soup.select('div.gallery__item-ul.swiper-wrapper.js-item-ul.gal-images')[-1].\
                 find_all('img')
+            img_number = 0  # счетчик кол-ва фотографий у товара
             for image in images_soup:
-                images.append(MAIN_URL + image['src'][:image['src'].find('?')])
+                url_img = MAIN_URL + image['src'][:image['src'].find('?')]  # обрезаем параметры после "?"
+                file_img = save_images_by_url(session=session, url_img=url_img, number=number, count=img_number)
+                if file_img:
+                    images.append(FTP_DIR_IMAGES + file_img)
+                img_number += 1
         except Exception as ex:
             logger.warning(f'Ошибка при парсинге изображений {ex}')  # продолжаем парсинг
 
@@ -165,7 +256,11 @@ def get_parsing_product(session, url_product):
         try:
             documents_soup = soup.find_all('div', class_='product__document-item')
             for doc in documents_soup:
-                documents.append(MAIN_URL + doc.find('a').get('href').replace('&convert', ''))
+                doc_url = MAIN_URL + doc.find('a').get('href').replace('&convert', '')
+                doc_name = doc.find('a').text.strip().replace('\n', ' ').replace(' ', '-')
+                doc_file = save_document_by_url(session=session, doc_url=doc_url, doc_name=doc_name)
+                if doc_file:
+                    documents.append(FTP_DIR_DOCS + doc_file)
         except Exception as ex:
             logger.warning(f'Ошибка при парсинге документов {ex}')  # продолжаем парсинг
 
@@ -260,7 +355,7 @@ def parsing(article_numbers: list):
 
         logger.info(f'Переходим на страницу товара и парсим информацию')
         try:
-            result_parsing_product = get_parsing_product(session=session, url_product=url_product)
+            result_parsing_product = get_parsing_product(session=session, url_product=url_product, number=number)
             if not result_parsing_product:  # ответ сервера был не 200
                 logger.warning(f'Пропускаем товар')
                 continue  # продолжаем цикл и делаем проверку на лимит ошибок

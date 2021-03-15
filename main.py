@@ -7,7 +7,8 @@ import pandas as pd
 from loguru import logger
 
 import parsing
-from settings.settings import FILE_PARSING, FILE_RECOVERY, DIR_LOGS, DIR_RECOVERY, RECOVERY_MODE
+from settings.settings import FILE_PARSING, FILE_RECOVERY, DIR_PARSING, DIR_LOGS, DIR_RECOVERY, \
+    RECOVERY_MODE, FILE_RESULT_CSV, DIR_PICKLE
 
 
 def get_article_from_file(name_file):
@@ -34,38 +35,39 @@ def save_result_to_csv_file(result):
 
     for key, product in result.items():
         product_dict = {
-            'ID': key,
-            'Наименование': product['product_name'],
+            'ID': 'fl' + key[-1::-1].replace('-', ''),  # "переворачиваем значение и добавляем fl"
+            'Наименование': product['product_name'].replace('\n', ''),
             'Цена': product['price'],
 
-            'Наличие': product['stock']
-            if product['stock'].find('—') == -1 else product['stock'][:product['stock'].find('—')].strip(),
+            'Наличие': 'onbackorder' if not re.search('\d+', product['stock']) else 'instock',
 
             'Остаток': '0' if not re.search('\d+', product['stock']) else re.search('\d+', product['stock']).group(0),
 
             'Изображения': ';'.join(product['images']),  # преобразование списка в строку
             'Документы': ';'.join(product['documents']),
-            'Title': product['title'],
-            'Description': product['description'],
-            'Keywords': product['keywords'],
+            'Title': product['title'].replace('\n', ''),
+            'Description': product['description'].replace('\n', ''),
+            'Keywords': product['keywords'].replace('\n', ''),
         }
 
         for n, group in enumerate(product['groups']):
-            product_dict['Раздел_' + str(n+1)] = group
+            product_dict['Раздел_' + str(n+1)] = group.replace('\n', '')
 
         for prop, value in product['properties'].items():
-            product_dict[prop] = value
+            product_dict[prop] = value.replace('\n', '')
 
         result_list.append(product_dict)
 
     # сохранение результата в json файл
-    with open('result.json', 'w', encoding='utf-8') as file:
+    path_result_file_json = os.getcwd() + DIR_PICKLE + 'result.json'
+    with open(path_result_file_json, 'w', encoding='utf-8') as file:
         json.dump(result_list, file, ensure_ascii=False, indent=4)
         logger.success(f'Успешно сохранили результаты парсинга в json-файл result.json')
 
     # сохранение результата в csv-файл
     df = pd.DataFrame(result_list)
-    df.to_csv(f'result.csv', encoding='utf-8', sep=';', index=False)
+    path_result_file_csv = os.getcwd() + DIR_PARSING + FILE_RESULT_CSV
+    df.to_csv(path_result_file_csv, encoding='utf-8', sep=';', index=False)
     logger.success(f'Успешно сохранили результаты парсинга в csv-файл result.csv')
 
     # return result_list
@@ -78,7 +80,7 @@ if __name__ == '__main__':
 
     # проверяем режим работы (стандартный или восстановление) и определяем имя файла для парсинга
     if not RECOVERY_MODE:
-        file_work = os.getcwd() + FILE_PARSING
+        file_work = os.getcwd() + DIR_PARSING + FILE_PARSING
     else:
         logger.warning(f'Запущен режим восстановления (допарсинга) из файла {FILE_RECOVERY}')
         file_work = os.getcwd() + DIR_RECOVERY + FILE_RECOVERY
