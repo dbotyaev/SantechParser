@@ -82,7 +82,7 @@ def save_images_by_url(session, url_img, number, count):
         if response.status_code == 200 and response.content:
             save_session(session=session)
 
-            ext_file = url_img[url_img.rfind('.'):]
+            ext_file = url_img[url_img.rfind('.'):]  # расширение файла
             name_file = 'img' + number[-1::-1].replace('-', '') + str(count) + ext_file
 
             with open(os.getcwd() + DIR_IMAGES + name_file, 'wb') as file:
@@ -121,18 +121,20 @@ def save_document_by_url(session, doc_url, doc_name):
             doc_hash = doc_url[doc_url.rfind('=') + 1:]  # получаем хеш документа из ссылки
 
             # создаем директорию
-            path_dir = os.getcwd() + DIR_DOCS + doc_hash + '\\'
-            # TODO сделать универсально для разных ОС
-            try:
-                os.mkdir(path=path_dir)
-            except FileExistsError:
-                pass
+            # path_dir = os.getcwd() + DIR_DOCS + doc_hash + '\\'
+            # # TODO сделать универсально для разных ОС
+            # try:
+            #     os.mkdir(path=path_dir)
+            # except FileExistsError:
+            #     pass
 
-            name_file = doc_name + '.pdf'
+            path_dir = os.getcwd() + DIR_DOCS
+
+            name_file = doc_name + '@' + doc_hash + '.pdf'
             with open(path_dir + name_file, 'wb') as file:
                 file.write(response.content)
 
-            name_file = f'{doc_hash}/{name_file}'
+            # name_file = f'{doc_hash}/{name_file}'
 
         else:
             logger.error(f'Получить документ товара невозможно. Ответ сервера {response.status_code}')
