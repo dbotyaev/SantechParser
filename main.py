@@ -21,6 +21,7 @@ def get_article_from_file(name_file):
     with open(name_file, mode='r', encoding='utf-8') as file:
         artickle_numbers = file.read().splitlines()
         # artickle_numbers = [number for number in (line.rstrip() for line in file.readlines())]
+        artickle_numbers = list(filter(None, artickle_numbers))
     return artickle_numbers
 
 
